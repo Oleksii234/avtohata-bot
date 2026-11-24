@@ -1,0 +1,19 @@
+# Запуск: docker compose up -d --build
+# Логи:   docker compose logs -f
+# Стоп:   docker compose down
+services:
+  bot:
+    build: .
+    container_name: avtohata-bot
+    env_file: .env                     # BOT_TOKEN, SHEET_ID, ADMIN_ID, ADMIN_REPLIES
+    environment:
+      GOOGLE_CREDENTIALS: /app/secrets/credentials.json
+    volumes:
+      # Ключ Google подключаем снаружи, только для чтения
+      - ./credentials.json:/app/secrets/credentials.json:ro
+    restart: unless-stopped            # сам поднимется после сбоя или перезагрузки сервера
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"                # чтобы логи не съели диск
+        max-file: "3"

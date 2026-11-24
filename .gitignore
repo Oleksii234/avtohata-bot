@@ -1,0 +1,11 @@
+.env
+credentials.json
+.venv/
+__pycache__/
+*.db
+.idea/
+*.msix
+.pytest_cache/
+
+# Личные рабочие заметки — не публикуем
+CLAUDE.md

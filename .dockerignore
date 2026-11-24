@@ -1,0 +1,17 @@
+# Секреты — никогда не кладём в образ
+.env
+credentials.json
+
+# Локальное окружение и мусор
+.venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.git/
+
+# Не нужно для работы бота
+*.msix
+*.bat
+*.md
+.env.example
