@@ -1,0 +1,23 @@
+# systemd-служба: запускает бота при старте сервера и перезапускает, если он упал.
+# Альтернатива Docker для маленького сервера (так же устроен соседний maria-bot).
+# Установка (на сервере):
+#   sudo cp deploy/avtohata-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now avtohata-bot
+# Логи: journalctl -u avtohata-bot -f
+
+[Unit]
+Description=AvtoHata auto parts Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/avtohata-bot
+ExecStart=/home/ubuntu/avtohata-bot/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
