@@ -86,7 +86,28 @@ def admin_answer_kb(number: int, colleagues: dict[int, str] | None = None) -> In
     ]
     for user_id, name in (colleagues or {}).items():
         rows.append([btn(f"👨‍🔧 Надіслати: {name}", "fwd", user_id)])
+    rows.append(note_button(number))
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# --- Подпись «хто це» о клиенте (видят только сотрудники) ---
+
+class NoteCb(CallbackData, prefix="note"):
+    """note:<number> — подписать клиента из заявки №number."""
+    number: int
+
+
+def note_button(number: int) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text="📝 Підписати клієнта (хто це)",
+                                 callback_data=NoteCb(number=number).pack())]
+
+
+def note_only_kb(number: int) -> InlineKeyboardMarkup:
+    """Простой режим (без кнопок ответа): под заявкой только «Підписати»."""
+    return InlineKeyboardMarkup(inline_keyboard=[note_button(number)])
+
+
+BTN_NOTE_DELETE = "🗑 Видалити підпис"
 
 
 def arrived_kb(number: int) -> InlineKeyboardMarkup:

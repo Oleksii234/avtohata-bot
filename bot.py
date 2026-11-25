@@ -17,6 +17,7 @@ from aiogram.utils.deep_linking import create_start_link
 import admin
 import config
 import form
+import notes
 import settings
 import sheets
 from keyboards import BTN_CONTACTS, BTN_MY_REQUESTS, MAIN_MENU
@@ -187,6 +188,7 @@ async def main() -> None:
         parse_mode=ParseMode.HTML, link_preview_is_disabled=True))
     # admin — раньше form: пока папа вводит цену, его текст не должен попасть в форму.
     # В простом режиме (ADMIN_REPLIES=0) ответы кнопками не подключаем вовсе.
+    dp.include_router(notes.router)  # «Підписати клієнта» — в обоих режимах
     if config.ADMIN_REPLIES:
         dp.include_router(admin.router)
         dp.include_router(admin.client_router)  # «Беру / Не потрібно» от клиентов

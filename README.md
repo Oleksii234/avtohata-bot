@@ -30,6 +30,9 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 - Instant notification for every request (with the VIN photo, if sent); the phone number is tappable → call or copy.
 - All requests in a Google Sheet: number, date, customer, phone, car, VIN, part, status, price, delivery time, comment.
 - The owner sees no customer menu — only notifications.
+- **Private client notes**: under every request the owner (or the colleague) can tap "📝 Sign the client" and
+  write who this is ("neighbour Ivan, drives a Lanos"). The note is shown in that customer's next requests —
+  only to staff, never to the customer. Notes live on a separate "Clients" tab of the same Google Sheet.
 - **Handover in one tap**: `/peredat` creates a one-time link (valid 7 days). Whoever opens it becomes
   the owner — no need to look up Telegram IDs or edit config files. The previous owner is notified.
 
@@ -73,6 +76,7 @@ about Telegram, so the same storage can be reused for another channel (website f
 |---|---|
 | `bot.py` | Entry point: `/start`, contacts, "My requests", router setup |
 | `form.py` | Request form (finite state machine), sheet write, owner notification |
+| `notes.py` | Staff-only client notes ("who is this") |
 | `admin.py` | Owner replies via inline buttons (full mode) |
 | `sheets.py` | Google Sheets: append, find by number, update status, customer history |
 | `keyboards.py` | All buttons and callback data |

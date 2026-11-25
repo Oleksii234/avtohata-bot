@@ -147,3 +147,65 @@ async def update_status(number: int, status: str, comment: str | None = None) ->
 async def client_requests(tg_id: int, limit: int = 5) -> list[dict]:
     """Последние заявки клиента (старые сверху, новые снизу)."""
     return await asyncio.to_thread(_client_requests, tg_id, limit)
+
+
+# --- Лист «Клієнти»: подписи «хто це» — видят только сотрудники, клиенту не показываются ---
+
+NOTES_TITLE = "Клієнти"
+NOTES_HEADERS = ["Telegram ID", "Клієнт", "Телефон", "Хто це (бачать лише працівники)"]
+
+_notes_ws: gspread.Worksheet | None = None
+
+
+def _get_notes_ws() -> gspread.Worksheet:
+    """Второй лист таблицы; создаём при первом обращении."""
+    global _notes_ws
+    if _notes_ws is None:
+        spreadsheet = _get_worksheet().spreadsheet
+        try:
+            _notes_ws = spreadsheet.worksheet(NOTES_TITLE)
+        except gspread.WorksheetNotFound:
+            _notes_ws = spreadsheet.add_worksheet(NOTES_TITLE, rows=200, cols=len(NOTES_HEADERS))
+        if _notes_ws.row_values(1) != NOTES_HEADERS:
+            _notes_ws.update(range_name="A1", values=[NOTES_HEADERS])
+            _notes_ws.freeze(rows=1)
+    return _notes_ws
+
+
+def _note_row(ws: gspread.Worksheet, tg_id: int) -> int | None:
+    for index, value in enumerate(ws.col_values(1), start=1):
+        if index > 1 and value.strip() == str(tg_id):
+            return index
+    return None
+
+
+def _get_note(tg_id: int) -> str:
+    ws = _get_notes_ws()
+    row = _note_row(ws, tg_id)
+    if row is None:
+        return ""
+    values = ws.row_values(row) + [""] * len(NOTES_HEADERS)
+    return values[3].strip()
+
+
+def _set_note(tg_id: int, client: str, phone: str, note: str) -> None:
+    ws = _get_notes_ws()
+    row = _note_row(ws, tg_id)
+    values = [[str(tg_id), client, phone, note]]
+    if row is None:
+        ws.append_row(values[0], value_input_option="RAW")
+    else:
+        ws.update(range_name=f"A{row}:D{row}", values=values, value_input_option="RAW")
+
+
+async def get_note(tg_id: int | str) -> str:
+    """Подпись сотрудников о клиенте («Сусід Іван, бере на Ланос») или ""."""
+    try:
+        return await asyncio.to_thread(_get_note, int(tg_id))
+    except (ValueError, TypeError):
+        return ""
+
+
+async def set_note(tg_id: int | str, client: str, phone: str, note: str) -> None:
+    """Сохраняет подпись; пустая строка — удалить подпись."""
+    await asyncio.to_thread(_set_note, int(tg_id), client, phone, note)

@@ -19,6 +19,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.utils.deep_linking import create_start_link
 
+import notes
 import settings
 import sheets
 from keyboards import (
@@ -67,7 +68,13 @@ async def on_forward(callback: CallbackQuery, callback_data: AdminCb, bot: Bot) 
         return
 
     original = callback.message
-    text = "📨 <b>Вам передали заявку</b>\n\n" + (original.html_text or "")
+    # Подпись берём свежую из таблицы (папа мог подписать клиента уже после уведомления),
+    # старую строку «Хто це» из копии убираем, чтобы не было двух
+    request = await sheets.get_request(number)
+    note = await notes.safe_get_note(request["tg_id"]) if request else ""
+    body = "\n".join(line for line in (original.html_text or "").split("\n")
+                     if not line.startswith("🏷 <b>Хто це:</b>"))
+    text = "📨 <b>Вам передали заявку</b>\n" + notes.note_line(note) + "\n" + body
     try:
         if original.photo:
             await bot.send_photo(colleague, original.photo[-1].file_id, caption=text,
@@ -280,14 +287,16 @@ async def on_client_decision(callback: CallbackQuery, callback_data: ClientCb, b
 
     await callback.answer()
     part = html.escape(request["part"])
-    phone = html.escape(request["phone"])
+    # Клиент + подпись «хто це» — только в тексте для сотрудников, клиенту не уходит
+    who = (f"👤 {html.escape(request['client'])}, 📞 {html.escape(request['phone'])}\n"
+           + notes.note_line(await notes.safe_get_note(request["tg_id"])))
     if callback_data.action == "yes":
         await sheets.update_status(number, STATUS_CONFIRMED)
         await callback.message.answer(
             "👍 Дякуємо! Замовляємо деталь. Щойно вона буде в магазині — бот одразу вам напише.")
         text = (f"✅ <b>Клієнт бере — замовте деталь</b> (заявка №{number})\n"
                 f"🔧 {part}\n💰 {html.escape(request['price'])}, 🚚 {html.escape(request['term'])}\n"
-                f"📞 {phone}\n\n"
+                f"{who}\n"
                 "Коли деталь привезуть — натисніть кнопку нижче, клієнт отримає повідомлення 👇")
         keyboard = arrived_kb(number)
     else:
@@ -296,7 +305,7 @@ async def on_client_decision(callback: CallbackQuery, callback_data: ClientCb, b
             "Зрозуміли, не замовляємо. Якщо знадобиться інша запчастина — "
             "натисніть «🔧 Підібрати запчастину».")
         text = (f"❌ <b>Клієнт відмовився</b> від заявки №{number} — замовляти не потрібно.\n"
-                f"🔧 {part}\n📞 {phone}")
+                f"🔧 {part}\n{who}")
         keyboard = None
 
     for staff_id in settings.staff_for(number):

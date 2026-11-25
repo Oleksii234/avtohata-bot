@@ -15,11 +15,12 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 import config
+import notes
 import settings
 import sheets
 from keyboards import (
     BTN_CANCEL, BTN_OTHER_CAR, BTN_REQUEST, BTN_RESTART, BTN_SAME_CAR, BTN_SEND, BTN_VIN_SKIP,
-    CANCEL_KB, CONFIRM_KB, MAIN_MENU, SAME_CAR_KB, VIN_KB, admin_answer_kb, phone_kb,
+    CANCEL_KB, CONFIRM_KB, MAIN_MENU, SAME_CAR_KB, VIN_KB, admin_answer_kb, note_only_kb, phone_kb,
 )
 
 router = Router()
@@ -260,15 +261,17 @@ async def _notify_admin(bot: Bot, number: int, data: dict) -> None:
     if not admin_id:
         return
     username = f" (@{data.get('username')})" if data.get("username") else ""
-    text = (f"🆕 <b>Нова заявка №{number}</b>\n👤 {html.escape(data['client'])}{username}\n\n"
-            + _summary(data))
+    # Подпись «хто це» — только в сообщении сотруднику, клиенту она не уходит никогда
+    note = await notes.safe_get_note(data["tg_id"])
+    text = (f"🆕 <b>Нова заявка №{number}</b>\n👤 {html.escape(data['client'])}{username}\n"
+            + notes.note_line(note) + "\n" + _summary(data))
     if config.ADMIN_REPLIES:
-        # Кнопки ответа (admin.py) + «Надіслати: <колега>» для каждого коллеги
+        # Кнопки ответа (admin.py) + «Надіслати: <колега>» + «Підписати клієнта»
         keyboard = admin_answer_kb(number, settings.colleagues())
         text += "\n\n👇 <b>Оберіть відповідь клієнту</b> або зателефонуйте — натисніть на номер."
     else:
         # Простой режим: папа просто звонит. Номер Telegram сам делает нажимаемым.
-        keyboard = None
+        keyboard = note_only_kb(number)
         text += "\n\n☎️ <b>Зателефонуйте клієнту</b> — натисніть на номер вище."
     try:
         if data.get("photo_id"):

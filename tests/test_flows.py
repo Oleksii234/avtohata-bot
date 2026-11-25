@@ -23,6 +23,7 @@ import admin  # noqa: E402
 import bot as botmod  # noqa: E402
 import config  # noqa: E402
 import form  # noqa: E402
+import notes  # noqa: E402
 import settings  # noqa: E402
 import sheets  # noqa: E402
 
@@ -33,6 +34,7 @@ ADMIN, CLIENT, BLOCKED = 1000, 555, 777
 class FakeSheet:
     def __init__(self):
         self.rows: list[dict] = []
+        self.notes: dict[str, str] = {}  # лист «Клієнти»
 
     async def append_request(self, data):
         n = len(self.rows) + 1
@@ -63,6 +65,12 @@ class FakeSheet:
                 return True
         return False
 
+    async def get_note(self, tg_id):
+        return self.notes.get(str(tg_id), "")
+
+    async def set_note(self, tg_id, client, phone, note):
+        self.notes[str(tg_id)] = note
+
     async def client_requests(self, tg_id, limit=5):
         return [dict(r) for r in self.rows if r["tg_id"] == str(tg_id)][-limit:]
 
@@ -89,6 +97,7 @@ class FakeBot(Bot):
 
 
 dp = botmod.dp
+dp.include_router(notes.router)
 dp.include_router(admin.router)
 dp.include_router(admin.client_router)
 dp.include_router(form.router)
@@ -99,7 +108,8 @@ _ids = iter(range(1, 10**6))
 def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")  # чистые настройки
     sheet = FakeSheet()
-    for name in ("append_request", "get_request", "update_answer", "update_status", "client_requests"):
+    for name in ("append_request", "get_request", "update_answer", "update_status", "client_requests",
+                 "get_note", "set_note"):
         monkeypatch.setattr(sheets, name, getattr(sheet, name))
     fake = FakeBot()
     dp.fsm.storage = MemoryStorage()  # чистые состояния FSM в каждом тесте
@@ -211,7 +221,9 @@ def test_simple_mode(env, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_REPLIES", False)
     fill_form(fake, CLIENT)
     notification = next(m for m in fake.sent if m.chat_id == ADMIN)
-    assert notification.reply_markup is None and "Зателефонуйте" in notification.text
+    assert notification.reply_markup.inline_keyboard == [[notification.reply_markup.inline_keyboard[0][0]]]
+    assert notification.reply_markup.inline_keyboard[0][0].callback_data == "note:1"  # только «Підписати»
+    assert "Зателефонуйте" in notification.text
     assert "Сюди приходитимуть нові заявки" in send(fake, ADMIN, "/start")[0]
     assert "Вітаємо в АвтоХаті" in send(fake, CLIENT, "/start")[0]
 
@@ -341,13 +353,14 @@ def test_colleague_invite_and_forward(env):
     fill_form(fake, CLIENT)
     assert fake.texts(OLEG) == []  # сам по себе коллеге ничего не приходит
     notification = next(m for m in fake.sent if getattr(m, "chat_id", None) == ADMIN)
-    assert notification.reply_markup.inline_keyboard[-1][0].callback_data == f"adm:fwd:1:{OLEG}"
+    assert notification.reply_markup.inline_keyboard[-2][0].callback_data == f"adm:fwd:1:{OLEG}"
 
     assert "не передана" in press(fake, OLEG, "adm:stock:1:0")[0]  # пока не передали — нельзя
     press(fake, ADMIN, f"adm:fwd:1:{OLEG}")
     to_oleg = next(m for m in fake.sent if getattr(m, "chat_id", None) == OLEG)
     assert "Вам передали заявку" in to_oleg.text
-    assert len(to_oleg.reply_markup.inline_keyboard) == 3  # у коллеги нет кнопки пересылки
+    buttons = [r[0].callback_data for r in to_oleg.reply_markup.inline_keyboard]
+    assert buttons == ["adm:stock:1:0", "adm:order:1:0", "adm:none:1:0", "note:1"]  # без пересылки
 
     order(fake, OLEG, 1, price="900", term="Протягом години")
     assert sheet.rows[0]["price"] == "900 грн" and sheet.rows[0]["comment"] == f"Відповів: U{OLEG}"
@@ -368,3 +381,53 @@ def test_colleague_cannot_forward_and_can_be_removed(env):
     press(fake, ADMIN, f"stf:del:{OLEG}")
     assert settings.colleagues() == {}
     assert press(fake, OLEG, "adm:stock:1:0") == []  # больше не сотрудник — кнопки молчат
+
+
+# --- Подпись «хто це»: видят только сотрудники ---
+SECRET = "Сусід Іван, бере на Ланос"
+
+
+def test_note_shown_to_staff_never_to_client(env):
+    sheet, fake = env
+    add_oleg(fake)
+    fill_form(fake, CLIENT)
+    press(fake, ADMIN, "note:1")
+    assert "клієнт його не бачить" in fake.texts(ADMIN)[0]
+    assert "Збережено" in send(fake, ADMIN, SECRET)[0]
+    assert sheet.notes[str(CLIENT)] == SECRET
+
+    client_texts = []
+    send(fake, CLIENT, "🔧 Підібрати запчастину")  # вторая заявка того же клиента
+    client_texts += fake.texts(CLIENT)
+    send(fake, CLIENT, "✅ Те саме авто")
+    client_texts += fake.texts(CLIENT)
+    send(fake, CLIENT, "фільтр")
+    client_texts += fake.texts(CLIENT)
+    send(fake, CLIENT, "✅ Надіслати заявку")
+    client_texts += fake.texts(CLIENT)
+    assert "Сусід Іван" in fake.texts(ADMIN)[0]  # папа видит подпись в новой заявке
+
+    press(fake, ADMIN, f"adm:fwd:2:{OLEG}")
+    assert "Сусід Іван" in fake.texts(OLEG)[0]  # коллега тоже видит
+
+    order(fake, OLEG, 2)
+    client_texts += fake.texts(CLIENT)
+    press(fake, CLIENT, "cli:yes:2")
+    client_texts += fake.texts(CLIENT)
+    assert "Сусід Іван" in fake.texts(ADMIN)[0]  # и в «Клієнт бере»
+    press(fake, ADMIN, "adm:arrived:2:0")
+    client_texts += fake.texts(CLIENT)
+    client_texts += send(fake, CLIENT, "📋 Мої заявки")
+    assert client_texts and not any("Сусід Іван" in t or "Хто це" in t for t in client_texts)
+
+
+def test_note_only_staff_can_write_and_delete(env):
+    sheet, fake = env
+    fill_form(fake, CLIENT)
+    assert press(fake, CLIENT, "note:1") == []  # клиент не может подписывать
+    press(fake, ADMIN, "note:1")
+    send(fake, ADMIN, SECRET)
+    press(fake, ADMIN, "note:1")
+    assert "Зараз підписаний так" in fake.texts(ADMIN)[0]
+    assert "видалено" in send(fake, ADMIN, "🗑 Видалити підпис")[0]
+    assert sheet.notes[str(CLIENT)] == ""
