@@ -212,8 +212,17 @@ def _summary(data: dict) -> str:
     )
 
 
+def normalize_phone(phone: str) -> str:
+    """Приводим номер к виду +380671234567: номер с пробелами Telegram
+    не делает нажимаемым, а папе нужно звонить в одно касание."""
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 10 and digits.startswith("0"):  # 067... → +38067...
+        digits = "38" + digits
+    return "+" + digits
+
+
 async def _show_summary(message: Message, state: FSMContext, phone: str) -> None:
-    await state.update_data(phone=phone)
+    await state.update_data(phone=normalize_phone(phone))
     await state.set_state(RequestForm.confirm)
     data = await state.get_data()
     await message.answer(

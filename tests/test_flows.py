@@ -148,7 +148,7 @@ def test_repeat_request_same_car(env):
     send(fake, CLIENT, "✅ Те саме авто")
     assert "Перевірте заявку" in send(fake, CLIENT, "масляний фільтр")[0]  # телефон не спрашиваем
     send(fake, CLIENT, "✅ Надіслати заявку")
-    assert sheet.rows[1]["car"] == "VW Golf 6" and sheet.rows[1]["phone"] == "+380 67 123 45 67"
+    assert sheet.rows[1]["car"] == "VW Golf 6" and sheet.rows[1]["phone"] == "+380671234567"
 
 
 def test_admin_in_stock(env):
@@ -200,3 +200,11 @@ def test_simple_mode(env, monkeypatch):
     assert notification.reply_markup is None and "Зателефонуйте" in notification.text
     assert "Сюди приходитимуть нові заявки" in send(fake, ADMIN, "/start")[0]
     assert "Вітаємо в АвтоХаті" in send(fake, CLIENT, "/start")[0]
+
+
+def test_phone_normalized_for_tap_to_call(env):
+    sheet, fake = env
+    fill_form(fake, CLIENT)  # номер вводится как «+380 67 123 45 67»
+    assert sheet.rows[0]["phone"] == "+380671234567"
+    assert form.normalize_phone("067 123-45-67") == "+380671234567"
+    assert form.normalize_phone("380671234567") == "+380671234567"
