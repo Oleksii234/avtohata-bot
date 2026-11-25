@@ -23,6 +23,7 @@ import admin  # noqa: E402
 import bot as botmod  # noqa: E402
 import config  # noqa: E402
 import form  # noqa: E402
+import settings  # noqa: E402
 import sheets  # noqa: E402
 
 ADMIN, CLIENT, BLOCKED = 1000, 555, 777
@@ -65,6 +66,8 @@ class FakeBot(Bot):
         self.blocked: set[int] = set()
 
     async def __call__(self, method, request_timeout=None):
+        if type(method).__name__ == "GetMe":  # нужно для create_start_link
+            return User(id=1, is_bot=True, first_name="Bot", username="avtohata_zt_bot")
         chat = getattr(method, "chat_id", None)
         if chat in self.blocked and type(method).__name__ == "SendMessage":
             raise TelegramForbiddenError(method=method, message="bot was blocked by the user")
@@ -83,7 +86,8 @@ _ids = iter(range(1, 10**6))
 
 
 @pytest.fixture
-def env(monkeypatch):
+def env(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")  # чистые настройки
     sheet = FakeSheet()
     for name in ("append_request", "get_request", "update_answer", "client_requests"):
         monkeypatch.setattr(sheets, name, getattr(sheet, name))
@@ -208,3 +212,47 @@ def test_phone_normalized_for_tap_to_call(env):
     assert sheet.rows[0]["phone"] == "+380671234567"
     assert form.normalize_phone("067 123-45-67") == "+380671234567"
     assert form.normalize_phone("380671234567") == "+380671234567"
+
+
+DAD = 2000
+
+
+def test_admin_start_has_no_client_menu(env):
+    _, fake = env
+    send(fake, ADMIN, "/start")
+    greeting = fake.sent[0]
+    assert "Під кожною заявкою будуть кнопки" in greeting.text
+    assert type(greeting.reply_markup).__name__ == "ReplyKeyboardRemove"
+
+
+def test_handover_link(env):
+    sheet, fake = env
+    assert send(fake, CLIENT, "/peredat") == []  # не админ — ссылку создать нельзя
+
+    reply = send(fake, ADMIN, "/peredat")[0]
+    link = reply.splitlines()[1]
+    assert link.startswith("https://t.me/avtohata_zt_bot?start=admin_")
+    payload = link.split("start=")[1]
+
+    send(fake, DAD, "/start " + payload)  # папа открыл ссылку
+    assert "Сюди приходитимуть нові заявки" in fake.texts(DAD)[0]
+    assert "Бот передано" in fake.texts(ADMIN)[0]  # прежнего админа предупредили
+    assert settings.admin_id() == DAD
+
+    assert "вже використане" in send(fake, CLIENT, "/start " + payload)[0]  # одноразовая
+    assert settings.admin_id() == DAD
+
+    fill_form(fake, CLIENT)  # заявки теперь идут папе, с кнопками
+    notification = next(m for m in fake.sent if getattr(m, "chat_id", None) == DAD)
+    assert notification.reply_markup is not None
+    assert press(fake, ADMIN, "adm:stock:1") == []  # у прежнего админа кнопки больше не работают
+    press(fake, DAD, "adm:stock:1")
+    send(fake, DAD, "1500")
+    assert sheet.rows[0]["price"] == "1500 грн"
+
+
+def test_handover_wrong_token(env):
+    _, fake = env
+    send(fake, ADMIN, "/peredat")
+    assert "вже використане" in send(fake, CLIENT, "/start admin_wrong")[0]
+    assert settings.admin_id() == ADMIN

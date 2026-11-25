@@ -12,10 +12,12 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.utils.deep_linking import create_start_link
 
 import admin
 import config
 import form
+import settings
 import sheets
 from keyboards import BTN_CONTACTS, BTN_MY_REQUESTS, MAIN_MENU
 from texts import SHOP_CONTACTS, STATUS_FOR_CLIENT, STATUS_NEW
@@ -23,18 +25,52 @@ from texts import SHOP_CONTACTS, STATUS_FOR_CLIENT, STATUS_NEW
 dp = Dispatcher()
 
 
+def admin_greeting() -> str:
+    text = "👋 Вітаю! Сюди приходитимуть нові заявки від клієнтів.\n"
+    if config.ADMIN_REPLIES:
+        text += ("Під кожною заявкою будуть кнопки: <b>✅ Є в наявності</b>, "
+                 "<b>📦 Під замовлення</b> або <b>❌ Немає</b> — бот сам напише клієнту.\n")
+    return text + "Щоб зателефонувати клієнту — натисніть на його номер у заявці."
+
+
+# --- Передача бота: одноразовая ссылка t.me/<бот>?start=admin_<код> ---
+@dp.message(CommandStart(deep_link=True, magic=F.args.startswith("admin_")))
+async def cmd_start_handover(message: Message, state: FSMContext, bot: Bot) -> None:
+    await state.clear()
+    user = message.from_user
+    previous = settings.use_handover_token(message.text.split("admin_", 1)[1], user.id)
+    if previous is None:
+        await message.answer("Посилання вже використане або застаріло.", reply_markup=MAIN_MENU)
+        return
+    await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
+    if previous and previous != user.id:
+        try:
+            await bot.send_message(previous, f"✅ Бот передано: {html.escape(user.full_name)}. "
+                                             "Тепер заявки приходять йому.")
+        except Exception:
+            logging.warning("Не удалось предупредить прежнего админа")
+
+
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()  # если клиент застрял в форме — начинаем с чистого листа
-    if message.from_user.id == config.ADMIN_ID and not config.ADMIN_REPLIES:
-        # Папе клиентское меню не нужно — только уведомления о заявках
-        await message.answer(
-            "👋 Вітаю! Сюди приходитимуть нові заявки від клієнтів.\n"
-            "Щоб зателефонувати клієнту — натисніть на його номер у заявці.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
+    if settings.is_admin(message.from_user.id):
+        # Папе клиентское меню не нужно — только заявки
+        await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
         return
     await show_client_menu(message)
+
+
+@dp.message(Command("peredat"), F.from_user.id.func(settings.is_admin))
+async def cmd_handover(message: Message, bot: Bot) -> None:
+    # Новый админ открывает ссылку — и бот переходит к нему. Ссылка одноразовая.
+    link = await create_start_link(bot, "admin_" + settings.new_handover_token())
+    await message.answer(
+        "🔑 Посилання для передачі бота (одноразове, діє 7 днів):\n"
+        f"{link}\n\n"
+        "Коли нова людина відкриє його і натисне «Start», заявки почнуть приходити їй, "
+        "а не вам."
+    )
 
 
 @dp.message(Command("client"))
@@ -90,8 +126,8 @@ async def my_requests(message: Message) -> None:
 
 @dp.message(Command("test"))
 async def cmd_test(message: Message) -> None:
-    # Проверка связи с таблицей — только админу (пока ADMIN_ID=0, можно всем, для настройки)
-    if config.ADMIN_ID and message.from_user.id != config.ADMIN_ID:
+    # Проверка связи с таблицей — только админу (если админ не задан — можно всем, для настройки)
+    if settings.admin_id() and not settings.is_admin(message.from_user.id):
         return
     await message.answer("Пишу тестовий рядок у таблицю...")
     try:

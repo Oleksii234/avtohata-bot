@@ -30,6 +30,8 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 - Instant notification for every request (with the VIN photo, if sent); the phone number is tappable → call or copy.
 - All requests in a Google Sheet: number, date, customer, phone, car, VIN, part, status, price, delivery time, comment.
 - The owner sees no customer menu — only notifications.
+- **Handover in one tap**: `/peredat` creates a one-time link (valid 7 days). Whoever opens it becomes
+  the owner — no need to look up Telegram IDs or edit config files. The previous owner is notified.
 
 **Optional full mode** (`ADMIN_REPLIES=1`)
 - Inline buttons under each notification: ✅ In stock / 📦 On order / ❌ Not available.
@@ -71,6 +73,7 @@ about Telegram, so the same storage can be reused for another channel (website f
 | `keyboards.py` | All buttons and callback data |
 | `texts.py` | Shop contacts and status labels |
 | `config.py` | Settings from `.env` |
+| `settings.py` | Runtime settings in `data/settings.json`: current owner, handover link |
 | `tests/` | Offline dialog tests |
 
 ## Setup
@@ -87,7 +90,7 @@ about Telegram, so the same storage can be reused for another channel (website f
    |---|---|
    | `BOT_TOKEN` | token from BotFather |
    | `SHEET_ID` | spreadsheet ID (or full URL) |
-   | `ADMIN_ID` | Telegram ID of the owner (send `/id` to the bot to find it) |
+   | `ADMIN_ID` | Telegram ID of the initial owner (send `/id` to the bot); later changed via `/peredat` |
    | `ADMIN_REPLIES` | `0` — simple mode (owner calls back), `1` — reply with buttons |
    | `GOOGLE_CREDENTIALS` | path to the service account key, default `credentials.json` |
 
@@ -126,6 +129,7 @@ validation, repeat requests, all owner replies, a blocked customer and the simpl
 |---|---|---|
 | `/start` | everyone | main menu (owner: short greeting without menu) |
 | `/id` | everyone | show your Telegram ID |
+| `/peredat` | owner | one-time link to hand the bot over to a new owner |
 | `/client` | owner | open the customer menu (for testing) |
 | `/test` | owner | write a test row to the sheet |
 | `/cancel` | owner | cancel entering a price (full mode) |

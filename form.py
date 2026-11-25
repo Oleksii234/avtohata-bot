@@ -15,6 +15,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 import config
+import settings
 import sheets
 from keyboards import (
     BTN_CANCEL, BTN_OTHER_CAR, BTN_REQUEST, BTN_RESTART, BTN_SAME_CAR, BTN_SEND, BTN_VIN_SKIP,
@@ -255,22 +256,24 @@ async def send_request(message: Message, state: FSMContext, bot: Bot) -> None:
 
 async def _notify_admin(bot: Bot, number: int, data: dict) -> None:
     """Сообщение админу (папе). Ошибка здесь не должна ломать заявку клиента."""
-    if not config.ADMIN_ID:
+    admin_id = settings.admin_id()  # после передачи бота — новый админ (папа)
+    if not admin_id:
         return
     username = f" (@{data.get('username')})" if data.get("username") else ""
     text = (f"🆕 <b>Нова заявка №{number}</b>\n👤 {html.escape(data['client'])}{username}\n\n"
             + _summary(data))
     if config.ADMIN_REPLIES:
         keyboard = admin_answer_kb(number)  # кнопки ответа — обрабатываются в admin.py
+        text += "\n\n👇 <b>Оберіть відповідь клієнту</b> або зателефонуйте — натисніть на номер."
     else:
         # Простой режим: папа просто звонит. Номер Telegram сам делает нажимаемым.
         keyboard = None
         text += "\n\n☎️ <b>Зателефонуйте клієнту</b> — натисніть на номер вище."
     try:
         if data.get("photo_id"):
-            await bot.send_photo(config.ADMIN_ID, data["photo_id"], caption=text, reply_markup=keyboard)
+            await bot.send_photo(admin_id, data["photo_id"], caption=text, reply_markup=keyboard)
         else:
-            await bot.send_message(config.ADMIN_ID, text, reply_markup=keyboard)
+            await bot.send_message(admin_id, text, reply_markup=keyboard)
     except Exception:
         logging.exception("Не удалось отправить уведомление админу")
 

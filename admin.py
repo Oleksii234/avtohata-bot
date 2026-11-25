@@ -2,7 +2,7 @@
 Ответ админа (папы) на заявку.
 Под уведомлением о заявке три кнопки: «Є» / «Під замовлення» / «Немає».
 Бот спрашивает цену (и срок), отправляет ответ клиенту и записывает его в таблицу.
-Все обработчики здесь работают только для ADMIN_ID.
+Все обработчики здесь работают только для текущего админа (settings.admin_id()).
 """
 import html
 import logging
@@ -13,19 +13,22 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
-import config
+import settings
 import sheets
 from keyboards import (
-    ADMIN_CANCEL_KB, BTN_ADMIN_CANCEL, MAIN_MENU, TERM_KB, AdminCb,
+    ADMIN_CANCEL_KB, BTN_ADMIN_CANCEL, TERM_KB, AdminCb,
 )
 from texts import SHOP_CONTACTS, STATUS_IN_STOCK, STATUS_NEW, STATUS_NONE, STATUS_ORDER
 
 router = Router()
 # Фильтр на весь роутер: чужие нажатия и сообщения сюда не попадут
-router.message.filter(F.from_user.id == config.ADMIN_ID)
-router.callback_query.filter(F.from_user.id == config.ADMIN_ID)
+router.message.filter(F.from_user.id.func(settings.is_admin))
+router.callback_query.filter(F.from_user.id.func(settings.is_admin))
+
+# Админу клиентское меню не нужно — после ответа просто убираем клавиатуру
+NO_KB = ReplyKeyboardRemove()
 
 STATUS_BY_ACTION = {"stock": STATUS_IN_STOCK, "order": STATUS_ORDER, "none": STATUS_NONE}
 
@@ -78,7 +81,7 @@ async def on_answer_button(callback: CallbackQuery, callback_data: AdminCb,
 async def cancel_answer(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Відповідь скасовано. Кнопки під заявкою працюють, можна обрати знову.",
-                         reply_markup=MAIN_MENU)
+                         reply_markup=NO_KB)
 
 
 @router.message(AdminAnswer.price, F.text)
@@ -121,14 +124,14 @@ async def _finish(message: Message, state: FSMContext, bot: Bot) -> None:
 
     request = await sheets.get_request(number)
     if request is None:
-        await message.answer(f"❌ Заявку №{number} не знайдено в таблиці.", reply_markup=MAIN_MENU)
+        await message.answer(f"❌ Заявку №{number} не знайдено в таблиці.", reply_markup=NO_KB)
         return
 
     try:
         await sheets.update_answer(number, STATUS_BY_ACTION[action], price, term)
     except Exception:
         logging.exception("Не удалось обновить заявку в таблице")
-        await message.answer("❌ Не вдалося записати в таблицю, спробуйте ще раз.", reply_markup=MAIN_MENU)
+        await message.answer("❌ Не вдалося записати в таблицю, спробуйте ще раз.", reply_markup=NO_KB)
         return
 
     report = f"✅ Відповідь на заявку №{number} надіслано клієнту."
@@ -142,7 +145,7 @@ async def _finish(message: Message, state: FSMContext, bot: Bot) -> None:
                   f"({html.escape(request['client'])})\nУ таблиці статус оновлено.")
 
     await _remove_buttons(bot, data["adm_chat"], data["adm_msg"])
-    await message.answer(report, reply_markup=MAIN_MENU)
+    await message.answer(report, reply_markup=NO_KB)
 
 
 def _client_text(action: str, number: int, request: dict, price: str, term: str) -> str:

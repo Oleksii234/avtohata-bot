@@ -15,3 +15,4 @@ __pycache__/
 *.bat
 *.md
 .env.example
+data/

@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 
 # Запускаем не от root — так безопаснее
-RUN useradd --create-home --uid 1000 bot
+RUN useradd --create-home --uid 1000 bot && mkdir -p /app/data && chown bot /app/data
 USER bot
 
 CMD ["python", "bot.py"]

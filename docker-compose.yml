@@ -11,6 +11,8 @@ services:
     volumes:
       # Ключ Google подключаем снаружи, только для чтения
       - ./credentials.json:/app/secrets/credentials.json:ro
+      # Кто админ после передачи бота (/peredat) — должно пережить пересборку
+      - ./data:/app/data
     restart: unless-stopped            # сам поднимется после сбоя или перезагрузки сервера
     logging:
       driver: json-file
