@@ -263,7 +263,8 @@ async def _notify_admin(bot: Bot, number: int, data: dict) -> None:
     text = (f"🆕 <b>Нова заявка №{number}</b>\n👤 {html.escape(data['client'])}{username}\n\n"
             + _summary(data))
     if config.ADMIN_REPLIES:
-        keyboard = admin_answer_kb(number)  # кнопки ответа — обрабатываются в admin.py
+        # Кнопки ответа (admin.py) + «Надіслати: <колега>» для каждого коллеги
+        keyboard = admin_answer_kb(number, settings.colleagues())
         text += "\n\n👇 <b>Оберіть відповідь клієнту</b> або зателефонуйте — натисніть на номер."
     else:
         # Простой режим: папа просто звонит. Номер Telegram сам делает нажимаемым.

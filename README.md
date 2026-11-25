@@ -37,6 +37,11 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 - Inline buttons under each notification: ✅ In stock / 📦 On order / ❌ Not available.
 - The bot asks for the price (and delivery time with preset buttons), sends the answer to the customer and updates
   the sheet. Double answers are prevented; if the customer blocked the bot, the owner gets their phone instead.
+- **On order**: the customer gets "✅ I'll take it" / "❌ Not needed" buttons, so the shop orders only parts
+  that will actually be bought. When the part arrives, the owner taps "Arrived" and the customer is told
+  it is ready for pickup.
+- **Colleagues**: the owner invites a colleague with a one-time link. A request reaches the colleague only when
+  the owner taps "Send to <name>"; the colleague answers with the same buttons and the owner sees the answer.
 - "📋 My requests" for customers: their last 5 requests with live status read from the sheet —
   if the owner edits a status by hand, the customer sees it.
 
@@ -130,6 +135,7 @@ validation, repeat requests, all owner replies, a blocked customer and the simpl
 | `/start` | everyone | main menu (owner: short greeting without menu) |
 | `/id` | everyone | show your Telegram ID |
 | `/peredat` | owner | one-time link to hand the bot over to a new owner |
+| `/kolegy` | owner | colleagues panel: invite / remove |
 | `/client` | owner | open the customer menu (for testing) |
 | `/test` | owner | write a test row to the sheet |
 | `/cancel` | owner | cancel entering a price (full mode) |

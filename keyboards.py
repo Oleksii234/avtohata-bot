@@ -64,23 +64,70 @@ CONFIRM_KB = _kb(
 # --- Админ (папа) ---
 
 class AdminCb(CallbackData, prefix="adm"):
-    """Данные кнопки в уведомлении: adm:<action>:<number>. action: stock / order / none."""
+    """Кнопки сотрудника по заявке: adm:<action>:<number>:<to>.
+    action: stock / order / none — ответ клиенту; fwd — передать коллеге `to`;
+    arrived — деталь привезли, сообщить клиенту."""
+    action: str
+    number: int
+    to: int = 0
+
+
+def admin_answer_kb(number: int, colleagues: dict[int, str] | None = None) -> InlineKeyboardMarkup:
+    """Кнопки под уведомлением о новой заявке. colleagues — кому можно переслать (только у админа)."""
+    def btn(text: str, action: str, to: int = 0) -> InlineKeyboardButton:
+        return InlineKeyboardButton(
+            text=text, callback_data=AdminCb(action=action, number=number, to=to).pack()
+        )
+
+    rows = [
+        [btn("✅ Є в наявності", "stock")],
+        [btn("📦 Під замовлення", "order")],
+        [btn("❌ Немає", "none")],
+    ]
+    for user_id, name in (colleagues or {}).items():
+        rows.append([btn(f"👨‍🔧 Надіслати: {name}", "fwd", user_id)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def arrived_kb(number: int) -> InlineKeyboardMarkup:
+    """Под сообщением «клиент берёт»: нажать, когда деталь уже в магазине."""
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text="✅ Привезли — повідомити клієнта",
+        callback_data=AdminCb(action="arrived", number=number).pack(),
+    )]])
+
+
+# --- Клиент: ответ на «Під замовлення» ---
+
+class ClientCb(CallbackData, prefix="cli"):
+    """cli:<yes|no>:<number> — клиент берёт деталь под заказ или отказывается."""
     action: str
     number: int
 
 
-def admin_answer_kb(number: int) -> InlineKeyboardMarkup:
-    """Кнопки под уведомлением о новой заявке."""
-    def btn(text: str, action: str) -> InlineKeyboardButton:
-        return InlineKeyboardButton(
-            text=text, callback_data=AdminCb(action=action, number=number).pack()
-        )
-
+def client_decision_kb(number: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [btn("✅ Є в наявності", "stock")],
-        [btn("📦 Під замовлення", "order")],
-        [btn("❌ Немає", "none")],
+        [InlineKeyboardButton(text="✅ Беру, замовляйте",
+                              callback_data=ClientCb(action="yes", number=number).pack())],
+        [InlineKeyboardButton(text="❌ Не потрібно",
+                              callback_data=ClientCb(action="no", number=number).pack())],
     ])
+
+
+# --- Управление коллегами (у админа на /start) ---
+
+class StaffCb(CallbackData, prefix="stf"):
+    """stf:add:0 — ссылка-приглашение; stf:del:<id> — убрать коллегу."""
+    action: str
+    user: int = 0
+
+
+def staff_manage_kb(colleagues: dict[int, str]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="➕ Додати колегу", callback_data=StaffCb(action="add").pack())]]
+    for user_id, name in colleagues.items():
+        rows.append([InlineKeyboardButton(text=f"✖️ Прибрати колегу: {name}",
+                                          callback_data=StaffCb(action="del", user=user_id).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 BTN_ADMIN_CANCEL = "↩️ Скасувати відповідь"

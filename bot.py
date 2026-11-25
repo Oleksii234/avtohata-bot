@@ -42,7 +42,7 @@ async def cmd_start_handover(message: Message, state: FSMContext, bot: Bot) -> N
     if previous is None:
         await message.answer("Посилання вже використане або застаріло.", reply_markup=MAIN_MENU)
         return
-    await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
+    await send_admin_start(message)
     if previous and previous != user.id:
         try:
             await bot.send_message(previous, f"✅ Бот передано: {html.escape(user.full_name)}. "
@@ -51,14 +51,55 @@ async def cmd_start_handover(message: Message, state: FSMContext, bot: Bot) -> N
             logging.warning("Не удалось предупредить прежнего админа")
 
 
+# --- Приглашение коллеги: одноразовая ссылка t.me/<бот>?start=staff_<код> ---
+@dp.message(CommandStart(deep_link=True, magic=F.args.startswith("staff_")))
+async def cmd_start_colleague(message: Message, state: FSMContext, bot: Bot) -> None:
+    await state.clear()
+    user = message.from_user
+    if not settings.use_colleague_token(message.text.split("staff_", 1)[1], user.id, user.first_name):
+        await message.answer("Посилання вже використане або застаріло.", reply_markup=MAIN_MENU)
+        return
+    await message.answer(COLLEAGUE_GREETING, reply_markup=ReplyKeyboardRemove())
+    try:
+        await bot.send_message(
+            settings.admin_id(),
+            f"👨‍🔧 <b>{html.escape(user.first_name)}</b> тепер колега. Під новими заявками з’явиться "
+            f"кнопка «👨‍🔧 Надіслати: {html.escape(user.first_name)}».")
+    except Exception:
+        logging.warning("Не удалось сообщить админу о новом коллеге")
+
+
+COLLEAGUE_GREETING = (
+    "👋 Вітаю! Ви колега в АвтоХаті.\n"
+    "Сюди приходитимуть заявки, які вам передасть адмін. Під заявкою — кнопки "
+    "<b>✅ Є в наявності</b>, <b>📦 Під замовлення</b> або <b>❌ Немає</b>: бот сам напише клієнту, "
+    "а адмін побачить вашу відповідь.\n"
+    "Щоб зателефонувати клієнту — натисніть на його номер у заявці."
+)
+
+
+async def send_admin_start(message: Message) -> None:
+    # Папе клиентское меню не нужно — только заявки (и, в режиме с кнопками, панель коллег)
+    await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
+    if config.ADMIN_REPLIES:
+        await admin.send_staff_panel(message)
+
+
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()  # если клиент застрял в форме — начинаем с чистого листа
     if settings.is_admin(message.from_user.id):
-        # Папе клиентское меню не нужно — только заявки
-        await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
+        await send_admin_start(message)
+        return
+    if config.ADMIN_REPLIES and settings.is_colleague(message.from_user.id):
+        await message.answer(COLLEAGUE_GREETING, reply_markup=ReplyKeyboardRemove())
         return
     await show_client_menu(message)
+
+
+@dp.message(Command("kolegy"), F.from_user.id.func(settings.is_admin))
+async def cmd_colleagues(message: Message) -> None:
+    await admin.send_staff_panel(message)
 
 
 @dp.message(Command("peredat"), F.from_user.id.func(settings.is_admin))
@@ -148,6 +189,7 @@ async def main() -> None:
     # В простом режиме (ADMIN_REPLIES=0) ответы кнопками не подключаем вовсе.
     if config.ADMIN_REPLIES:
         dp.include_router(admin.router)
+        dp.include_router(admin.client_router)  # «Беру / Не потрібно» от клиентов
     dp.include_router(form.router)
     await dp.start_polling(bot)
 

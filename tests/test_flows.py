@@ -54,6 +54,15 @@ class FakeSheet:
                 return True
         return False
 
+    async def update_status(self, n, status, comment=None):
+        for r in self.rows:
+            if r["number"] == str(n):
+                r["status"] = status
+                if comment is not None:
+                    r["comment"] = comment
+                return True
+        return False
+
     async def client_requests(self, tg_id, limit=5):
         return [dict(r) for r in self.rows if r["tg_id"] == str(tg_id)][-limit:]
 
@@ -81,6 +90,7 @@ class FakeBot(Bot):
 
 dp = botmod.dp
 dp.include_router(admin.router)
+dp.include_router(admin.client_router)
 dp.include_router(form.router)
 _ids = iter(range(1, 10**6))
 
@@ -89,7 +99,7 @@ _ids = iter(range(1, 10**6))
 def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "SETTINGS_FILE", tmp_path / "settings.json")  # чистые настройки
     sheet = FakeSheet()
-    for name in ("append_request", "get_request", "update_answer", "client_requests"):
+    for name in ("append_request", "get_request", "update_answer", "update_status", "client_requests"):
         monkeypatch.setattr(sheets, name, getattr(sheet, name))
     fake = FakeBot()
     dp.fsm.storage = MemoryStorage()  # чистые состояния FSM в каждом тесте
@@ -158,26 +168,26 @@ def test_repeat_request_same_car(env):
 def test_admin_in_stock(env):
     sheet, fake = env
     fill_form(fake, CLIENT)
-    assert press(fake, CLIENT, "adm:stock:1") == []  # не админ — игнор
-    press(fake, ADMIN, "adm:stock:1")
+    assert press(fake, CLIENT, "adm:stock:1:0") == []  # не админ — игнор
+    press(fake, ADMIN, "adm:stock:1:0")
     assert "лише число" in send(fake, ADMIN, "дорого")[0]
     send(fake, ADMIN, "1 200 грн")
     assert "1200 грн" in fake.texts(CLIENT)[0]
     assert sheet.rows[0]["status"] == "Є в наявності" and sheet.rows[0]["price"] == "1200 грн"
-    assert "вже є відповідь" in press(fake, ADMIN, "adm:order:1")[0]  # второй раз клиенту не шлём
+    assert "вже є відповідь" in press(fake, ADMIN, "adm:order:1:0")[0]  # второй раз клиенту не шлём
 
 
 def test_admin_order_and_none(env):
     sheet, fake = env
     fill_form(fake, CLIENT, "амортизатори")
     fill_form(fake, 888, "свічки")
-    press(fake, ADMIN, "adm:order:1")
+    press(fake, ADMIN, "adm:order:1:0")
     send(fake, ADMIN, "2500")
     send(fake, ADMIN, "Протягом години")
     assert sheet.rows[0]["term"] == "Протягом години"
-    press(fake, ADMIN, "adm:stock:2")
+    press(fake, ADMIN, "adm:stock:2:0")
     assert "скасовано" in send(fake, ADMIN, "/cancel")[0]
-    press(fake, ADMIN, "adm:none:2")
+    press(fake, ADMIN, "adm:none:2:0")
     assert "На жаль" in fake.texts(888)[0] and sheet.rows[1]["status"] == "Немає"
 
 
@@ -185,7 +195,7 @@ def test_blocked_client(env):
     _, fake = env
     fill_form(fake, BLOCKED)
     fake.blocked.add(BLOCKED)
-    press(fake, ADMIN, "adm:stock:1")
+    press(fake, ADMIN, "adm:stock:1:0")
     assert "заблокував" in send(fake, ADMIN, "900")[-1]
 
 
@@ -245,8 +255,8 @@ def test_handover_link(env):
     fill_form(fake, CLIENT)  # заявки теперь идут папе, с кнопками
     notification = next(m for m in fake.sent if getattr(m, "chat_id", None) == DAD)
     assert notification.reply_markup is not None
-    assert press(fake, ADMIN, "adm:stock:1") == []  # у прежнего админа кнопки больше не работают
-    press(fake, DAD, "adm:stock:1")
+    assert press(fake, ADMIN, "adm:stock:1:0") == []  # у прежнего админа кнопки больше не работают
+    press(fake, DAD, "adm:stock:1:0")
     send(fake, DAD, "1500")
     assert sheet.rows[0]["price"] == "1500 грн"
 
@@ -256,3 +266,94 @@ def test_handover_wrong_token(env):
     send(fake, ADMIN, "/peredat")
     assert "вже використане" in send(fake, CLIENT, "/start admin_wrong")[0]
     assert settings.admin_id() == ADMIN
+
+
+# --- Под заказ: клиент «Беру / Не потрібно», потом «Привезли» ---
+
+def order(fake, staff, number, price="2500", term="Завтра"):
+    press(fake, staff, f"adm:order:{number}:0")
+    send(fake, staff, price)
+    return send(fake, staff, term)
+
+
+def test_order_client_takes_and_part_arrives(env):
+    sheet, fake = env
+    fill_form(fake, CLIENT)
+    order(fake, ADMIN, 1)
+    offer = next(m for m in fake.sent if getattr(m, "chat_id", None) == CLIENT)
+    assert "Замовляємо?" in offer.text and "зателефонуємо" not in offer.text
+    assert offer.reply_markup.inline_keyboard[0][0].callback_data == "cli:yes:1"
+
+    assert "Заявку не знайдено" in press(fake, 888, "cli:yes:1")[0]  # чужой клиент не может
+    press(fake, CLIENT, "cli:yes:1")
+    assert sheet.rows[0]["status"] == "Клієнт бере — замовити"
+    to_admin = next(m for m in fake.sent if getattr(m, "chat_id", None) == ADMIN)
+    assert "Клієнт бере" in to_admin.text
+    assert to_admin.reply_markup.inline_keyboard[0][0].callback_data == "adm:arrived:1:0"
+    assert any("вже отримано" in t for t in press(fake, CLIENT, "cli:no:1"))  # передумать кнопкой нельзя
+
+    press(fake, ADMIN, "adm:arrived:1:0")
+    assert "можна забирати" in fake.texts(CLIENT)[0]
+    assert sheet.rows[0]["status"] == "Привезли — можна забирати"
+    assert "Клієнту вже не потрібно писати" in press(fake, ADMIN, "adm:arrived:1:0")[0]  # второй раз — нет
+
+
+def test_order_client_declines(env):
+    sheet, fake = env
+    fill_form(fake, CLIENT)
+    order(fake, ADMIN, 1)
+    press(fake, CLIENT, "cli:no:1")
+    assert sheet.rows[0]["status"] == "Клієнт відмовився"
+    assert "замовляти не потрібно" in fake.texts(ADMIN)[0]
+
+
+# --- Колега (Олег): получает заявку, только если админ нажал «Надіслати» ---
+OLEG = 3000
+
+
+def add_oleg(fake):
+    send(fake, ADMIN, "/start")
+    panel = fake.sent[-1]
+    assert panel.reply_markup.inline_keyboard[0][0].callback_data == "stf:add:0"
+    link = next(t for t in press(fake, ADMIN, "stf:add:0") if "t.me/" in t).splitlines()[1]
+    send(fake, OLEG, "/start " + link.split("start=")[1])
+
+
+def test_colleague_invite_and_forward(env):
+    sheet, fake = env
+    add_oleg(fake)
+    assert "Ви колега" in fake.texts(OLEG)[0]
+    assert "тепер колега" in fake.texts(ADMIN)[0]
+    assert settings.colleagues() == {OLEG: f"U{OLEG}"}
+    assert "Ви колега" in send(fake, OLEG, "/start")[0]  # у коллеги нет клиентского меню
+
+    fill_form(fake, CLIENT)
+    assert fake.texts(OLEG) == []  # сам по себе коллеге ничего не приходит
+    notification = next(m for m in fake.sent if getattr(m, "chat_id", None) == ADMIN)
+    assert notification.reply_markup.inline_keyboard[-1][0].callback_data == f"adm:fwd:1:{OLEG}"
+
+    assert "не передана" in press(fake, OLEG, "adm:stock:1:0")[0]  # пока не передали — нельзя
+    press(fake, ADMIN, f"adm:fwd:1:{OLEG}")
+    to_oleg = next(m for m in fake.sent if getattr(m, "chat_id", None) == OLEG)
+    assert "Вам передали заявку" in to_oleg.text
+    assert len(to_oleg.reply_markup.inline_keyboard) == 3  # у коллеги нет кнопки пересылки
+
+    order(fake, OLEG, 1, price="900", term="Протягом години")
+    assert sheet.rows[0]["price"] == "900 грн" and sheet.rows[0]["comment"] == f"Відповів: U{OLEG}"
+    assert "відповів(ла) на заявку №1" in fake.texts(ADMIN)[0]  # папа видит ответ Олега
+
+    press(fake, CLIENT, "cli:yes:1")
+    assert "Клієнт бере" in fake.texts(ADMIN)[0] and "Клієнт бере" in fake.texts(OLEG)[0]
+    press(fake, OLEG, "adm:arrived:1:0")
+    assert "можна забирати" in fake.texts(CLIENT)[0]
+    assert "привезли" in fake.texts(ADMIN)[0]
+
+
+def test_colleague_cannot_forward_and_can_be_removed(env):
+    _, fake = env
+    add_oleg(fake)
+    fill_form(fake, CLIENT)
+    assert "лише адмін" in press(fake, OLEG, f"adm:fwd:1:{OLEG}")[0]
+    press(fake, ADMIN, f"stf:del:{OLEG}")
+    assert settings.colleagues() == {}
+    assert press(fake, OLEG, "adm:stock:1:0") == []  # больше не сотрудник — кнопки молчат

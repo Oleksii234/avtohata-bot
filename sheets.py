@@ -81,6 +81,7 @@ def _row_to_dict(row: list[str]) -> dict:
         "phone": row[COL_PHONE], "tg_id": row[COL_TG_ID], "car": row[COL_CAR],
         "year": row[COL_YEAR], "vin": row[COL_VIN], "part": row[COL_PART],
         "status": row[COL_STATUS], "price": row[COL_PRICE], "term": row[COL_TERM],
+        "comment": row[COL_COMMENT],
     }
 
 
@@ -111,6 +112,17 @@ def _update_answer(number: int, status: str, price: str, term: str) -> bool:
     return True
 
 
+def _update_status(number: int, status: str, comment: str | None) -> bool:
+    ws = _get_worksheet()
+    row_index = _find_row(ws, number)
+    if row_index is None:
+        return False
+    ws.update(range_name=f"J{row_index}", values=[[status]], value_input_option="RAW")
+    if comment is not None:  # столбец M «Коментар»
+        ws.update(range_name=f"M{row_index}", values=[[comment]], value_input_option="RAW")
+    return True
+
+
 def _client_requests(tg_id: int, limit: int) -> list[dict]:
     rows = _get_worksheet().get_all_values()[1:]
     mine = [_row_to_dict(r) for r in rows if len(r) > COL_TG_ID and r[COL_TG_ID].strip() == str(tg_id)]
@@ -125,6 +137,11 @@ async def get_request(number: int) -> dict | None:
 async def update_answer(number: int, status: str, price: str = "", term: str = "") -> bool:
     """Записывает ответ магазина. False — заявка не найдена."""
     return await asyncio.to_thread(_update_answer, number, status, price, term)
+
+
+async def update_status(number: int, status: str, comment: str | None = None) -> bool:
+    """Меняет только статус (и, если передан, комментарий). False — заявка не найдена."""
+    return await asyncio.to_thread(_update_status, number, status, comment)
 
 
 async def client_requests(tg_id: int, limit: int = 5) -> list[dict]:
