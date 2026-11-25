@@ -9,11 +9,11 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 
 > Bot UI and the sheet are in Ukrainian (the shop's customers); code comments are in Russian.
 
-<!-- Screenshots: add images to docs/ and uncomment
-| Customer form | Owner notification | Google Sheet |
-|---|---|---|
-| ![](docs/form.png) | ![](docs/notification.png) | ![](docs/sheet.png) |
--->
+| New request (step-by-step form) | Repeat request + owner notification |
+|---|---|
+| ![Customer fills in the request form](docs/form.png) | ![Same car remembered, only the part is asked; owner gets the request with a tap-to-call number](docs/repeat-and-notification.png) |
+
+<sub>Demo data. In these screenshots one account is both the customer and the shop owner.</sub>
 
 ## Features
 
@@ -21,6 +21,7 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 - Step-by-step request form: car model → year → VIN (or a photo of the registration certificate, or "I don't know")
   → the part → phone number (one-tap "Share contact" button) → confirmation.
 - Input validation at every step (VIN format, year range, phone number), cancel at any step.
+  Phone numbers are normalized to `+380XXXXXXXXX`, so Telegram makes them tap-to-call.
 - **Remembers the previous request**: next time the customer taps "Same car" and only types the part name —
   the car, VIN and phone are filled in from their last request.
 - Shop address, phones, map link and opening hours.
