@@ -312,11 +312,22 @@ OLEG = 3000
 
 
 def add_oleg(fake):
+    # Ссылку делаем на сервере (у папы кнопки «Додати колегу» нет), Олег её открывает
+    send(fake, OLEG, "/start staff_" + settings.new_colleague_token())
+
+
+def test_admin_start_has_no_staff_panel(env):
+    _, fake = env
     send(fake, ADMIN, "/start")
-    panel = fake.sent[-1]
-    assert panel.reply_markup.inline_keyboard[0][0].callback_data == "stf:add:0"
+    assert len(fake.sent) == 1 and type(fake.sent[0].reply_markup).__name__ == "ReplyKeyboardRemove"
+
+
+def test_colleague_link_via_hidden_command(env):
+    _, fake = env
+    send(fake, ADMIN, "/kolegy")
     link = next(t for t in press(fake, ADMIN, "stf:add:0") if "t.me/" in t).splitlines()[1]
     send(fake, OLEG, "/start " + link.split("start=")[1])
+    assert OLEG in settings.colleagues()
 
 
 def test_colleague_invite_and_forward(env):

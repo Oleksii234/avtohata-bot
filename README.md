@@ -135,7 +135,7 @@ validation, repeat requests, all owner replies, a blocked customer and the simpl
 | `/start` | everyone | main menu (owner: short greeting without menu) |
 | `/id` | everyone | show your Telegram ID |
 | `/peredat` | owner | one-time link to hand the bot over to a new owner |
-| `/kolegy` | owner | colleagues panel: invite / remove |
+| `/kolegy` | owner | colleagues panel: invite (one-time link) / remove |
 | `/client` | owner | open the customer menu (for testing) |
 | `/test` | owner | write a test row to the sheet |
 | `/cancel` | owner | cancel entering a price (full mode) |

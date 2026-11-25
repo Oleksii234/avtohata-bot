@@ -79,10 +79,10 @@ COLLEAGUE_GREETING = (
 
 
 async def send_admin_start(message: Message) -> None:
-    # Папе клиентское меню не нужно — только заявки (и, в режиме с кнопками, панель коллег)
+    # Папе клиентское меню не нужно — только заявки. Коллег он сам не добавляет:
+    # ссылку-приглашение делаем на сервере (settings.new_colleague_token), см. CLAUDE.md.
+    # Скрытая команда /kolegy — панель коллег на всякий случай.
     await message.answer(admin_greeting(), reply_markup=ReplyKeyboardRemove())
-    if config.ADMIN_REPLIES:
-        await admin.send_staff_panel(message)
 
 
 @dp.message(CommandStart())
