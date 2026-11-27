@@ -123,6 +123,18 @@ On Windows `start.bat` does all of this in one click.
 
 > Only one copy of the bot can run at a time (Telegram polling) — stop the local one before starting on a server.
 
+## Demo mode
+
+A second copy of the bot for demos and video recording that cannot interfere with the live one: same code,
+separate settings.
+
+1. Create another bot with BotFather and another spreadsheet (shared with the same service account).
+2. Copy `.env.example` to `.env.demo` and put the **test** token and sheet there.
+3. Run `start-demo.bat`, or `python bot.py --demo`.
+
+Demo mode reads only `.env.demo`, keeps its runtime settings in `data/demo/`, and refuses to start if the token or
+the sheet is the same as in `.env`.
+
 ## Tests
 
 ```bash

@@ -431,3 +431,12 @@ def test_note_only_staff_can_write_and_delete(env):
     assert "Зараз підписаний так" in fake.texts(ADMIN)[0]
     assert "видалено" in send(fake, ADMIN, "🗑 Видалити підпис")[0]
     assert sheet.notes[str(CLIENT)] == ""
+
+
+# --- Демо-режим: не должен запуститься с настоящим ботом или настоящей таблицей ---
+def test_demo_refuses_production_settings():
+    prod = {"BOT_TOKEN": "111:old", "SHEET_ID": "https://docs.google.com/spreadsheets/d/abc_DEF-1/edit#gid=0"}
+    # тот же бот с перевыпущенным токеном и та же таблица, вставленная только как ID
+    assert config.demo_conflicts({"BOT_TOKEN": "111:new", "SHEET_ID": "abc_DEF-1"}, prod) == ["BOT_TOKEN", "SHEET_ID"]
+    assert config.demo_conflicts({"BOT_TOKEN": "222:x", "SHEET_ID": "other"}, prod) == []
+    assert config.demo_conflicts({"BOT_TOKEN": "222:x", "SHEET_ID": "other"}, {}) == []

@@ -182,6 +182,8 @@ async def cmd_test(message: Message) -> None:
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
+    if config.DEMO:
+        logging.warning("ДЕМО-РЕЖИМ: тестовый бот, файл %s", config.ENV_FILE.name)
     # HTML-разметка по умолчанию: <b>жирный</b>, <code>код</code>
     # link_preview_is_disabled — без большой карточки Google Maps под контактами
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(
