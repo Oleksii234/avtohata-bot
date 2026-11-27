@@ -9,6 +9,15 @@ with a tappable phone number. A fuller "reply from the bot" mode is available be
 
 > Bot UI and the sheet are in Ukrainian (the shop's customers); code comments are in Russian.
 
+## Demo
+
+<a href="docs/demo.mp4"><img src="docs/demo.gif" width="360" alt="A customer fills in the request form, the owner gets it and answers with a price"></a>
+
+<sub>Real run of the demo bot (idle time cut, account name blurred): form → request to the owner → "In stock" + price →
+answer to the customer. One account plays both roles. Click for the [MP4 video](docs/demo.mp4).</sub>
+
+## Screenshots
+
 | New request (step-by-step form) | Repeat request + owner notification |
 |---|---|
 | ![Customer fills in the request form](docs/form.png) | ![Same car remembered, only the part is asked; owner gets the request with a tap-to-call number](docs/repeat-and-notification.png) |
